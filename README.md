@@ -57,15 +57,15 @@ Cult sessions expire after a while. When they do, any screen will send you back 
 ## Run it locally
 
 ```bash
-pnpm install
+npm install
 cp .env.example .env.local   # optional — every value has a default
-pnpm dev                     # http://localhost:3000
+npm run dev                  # http://localhost:3000
 ```
 
 ```bash
-pnpm test        # vitest — schedule parsing + rules engine (no network)
-pnpm typecheck   # tsc --noEmit
-pnpm build       # production build
+npm test              # vitest — schedule parsing + rules engine (no network)
+npm run typecheck     # tsc --noEmit
+npm run build         # production build
 ```
 
 ## Deploy (free)
