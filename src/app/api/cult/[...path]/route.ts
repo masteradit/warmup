@@ -14,7 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { PROXY_ALLOWLIST } from "@/lib/cult/constants";
+import { PROXY_ALLOWLIST, CULT_API_BASE, CULT_STATIC_HEADERS } from "@/lib/cult/constants";
 import { cultRequest, CultApiError, type CultSession } from "@/lib/cult/client";
 
 export const runtime = "nodejs";
@@ -58,7 +58,9 @@ function resolvePath(segments: string[], search: string): string | null {
   const joined = segments.join("/");
   const allowed = PROXY_ALLOWLIST.some((re) => re.test(joined));
   if (!allowed) return null;
-  return `/api/${joined}${search}`;
+  // Cult's API 500s on a percent-encoded comma in `centerId=` — it must stay a
+  // literal comma. Commas only ever appear as list separators in these queries.
+  return `/api/${joined}${search.replace(/%2C/gi, ",")}`;
 }
 
 async function handle(
@@ -87,6 +89,7 @@ async function handle(
 
   // `auth/*` endpoints don't need a session; everything else does.
   const isAuth = segments[0] === "auth";
+  const isVerifyOtp = segments.join("/") === "auth/loginPhoneVerifyOtp";
   const session = parseSession(req);
   if (!isAuth && !session) {
     return NextResponse.json(
@@ -98,6 +101,15 @@ async function handle(
   let body: unknown;
   if (method === "POST") {
     body = await req.json().catch(() => ({}));
+  }
+
+  // verifyOtp is the one call where the session is CREATED. Cult returns it as
+  // Set-Cookie headers, which the stateless proxy cannot persist. So we make
+  // this request by hand, read the `at`/`st` cookies off the response, and hand
+  // them back to the client in the JSON body as `__session` — the client stores
+  // that in localStorage and replays it via X-Cult-Session on every later call.
+  if (isVerifyOtp) {
+    return handleVerifyOtp(upstreamPath, body);
   }
 
   const controller = new AbortController();
@@ -139,6 +151,86 @@ async function handle(
     );
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function handleVerifyOtp(
+  upstreamPath: string,
+  body: unknown,
+): Promise<NextResponse> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const res = await fetch(`${CULT_API_BASE}${upstreamPath}`, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        ...CULT_STATIC_HEADERS,
+      },
+      body: JSON.stringify(body ?? {}),
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    const text = await res.text();
+    const data = text ? safeParse(text) : {};
+    if (!res.ok) {
+      return NextResponse.json(
+        {
+          error: "otp_failed",
+          status: res.status,
+          message: "Cult.fit rejected the OTP.",
+          detail: safeDetail(text),
+        },
+        { status: 400 },
+      );
+    }
+
+    const setCookies = readSetCookies(res);
+    const at = pickCookie(setCookies, "at");
+    const st = pickCookie(setCookies, "st");
+    const deviceId = pickCookie(setCookies, "deviceId");
+
+    return NextResponse.json({
+      ...(data as object),
+      __session:
+        at || st
+          ? { at, st, deviceId }
+          : // Cult didn't send tokens we can read — the OTP flow won't work on
+            // this deployment; the client should fall back to paste onboarding.
+            null,
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "proxy_error", message: "Could not reach Cult.fit for verification." },
+      { status: 504 },
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function readSetCookies(res: Response): string[] {
+  // Node 18+ / undici exposes getSetCookie(); fall back to a single header.
+  const anyHeaders = res.headers as Headers & { getSetCookie?: () => string[] };
+  if (typeof anyHeaders.getSetCookie === "function") return anyHeaders.getSetCookie();
+  const single = res.headers.get("set-cookie");
+  return single ? [single] : [];
+}
+
+function pickCookie(setCookies: string[], name: string): string | undefined {
+  for (const c of setCookies) {
+    const m = new RegExp(`(?:^|,\\s*)${name}=([^;]+)`).exec(c);
+    if (m) return decodeURIComponent(m[1]);
+  }
+  return undefined;
+}
+
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
   }
 }
 

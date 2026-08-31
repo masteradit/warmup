@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/*
+  Warmup design tokens. Mobile-first. Light palette on :root; dark overrides
+  gated so both the system preference and an explicit [data-theme] toggle win.
+  Colours are referenced through the utility classes at the bottom of this file
+  (bg-surface, text-muted, …) so components never hard-code a hex value.
+*/
+
+:root {
+  --bg: #fbfaf8;
+  --surface: #ffffff;
+  --surface-2: #f3f1ec;
+  --border: #e7e3db;
+  --text: #1c1a17;
+  --muted: #6b655c;
+  --accent: #e5533d;
+  --accent-fg: #ffffff;
+  --ok: #1f8a54;
+  --warn: #b26a00;
+  --danger: #c22f2f;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14130f;
+    --surface: #1d1b16;
+    --surface-2: #26231d;
+    --border: #34302a;
+    --text: #f3efe7;
+    --muted: #a29a8c;
+    --accent: #ff6a52;
+    --accent-fg: #1a0f0c;
+    --ok: #4cc98a;
+    --warn: #e0a44a;
+    --danger: #ef6b6b;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #14130f;
+  --surface: #1d1b16;
+  --surface-2: #26231d;
+  --border: #34302a;
+  --text: #f3efe7;
+  --muted: #a29a8c;
+  --accent: #ff6a52;
+  --accent-fg: #1a0f0c;
+  --ok: #4cc98a;
+  --warn: #e0a44a;
+  --danger: #ef6b6b;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+@layer utilities {
+  .bg-bg { background-color: var(--bg); }
+  .bg-surface { background-color: var(--surface); }
+  .bg-surface-2 { background-color: var(--surface-2); }
+  .bg-accent { background-color: var(--accent); }
+  .bg-ok { background-color: var(--ok); }
+  .text-fg { color: var(--text); }
+  .text-muted { color: var(--muted); }
+  .text-accent { color: var(--accent); }
+  .text-accent-fg { color: var(--accent-fg); }
+  .text-ok { color: var(--ok); }
+  .text-warn { color: var(--warn); }
+  .text-danger { color: var(--danger); }
+  .border-app { border-color: var(--border); }
+  .ring-accent { --tw-ring-color: var(--accent); }
+}
