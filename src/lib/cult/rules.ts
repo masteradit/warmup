@@ -168,13 +168,16 @@ export function resolvePreferences(
   const weekday = weekdayFor(parsedDate);
 
   let source: "default" | "weekday" | "date" = "default";
-  let rule: RulesConfig["weekly"][string] | undefined;
-  if (config.dates[parsedDate]) {
+  type Rule = z.infer<typeof ruleSchema>;
+  let rule: Rule | undefined;
+  const dateRule = config.dates[parsedDate] as Rule | undefined;
+  const weekdayRule = config.weekly[weekday] as Rule | undefined;
+  if (dateRule) {
     source = "date";
-    rule = config.dates[parsedDate];
-  } else if (config.weekly[weekday]) {
+    rule = dateRule;
+  } else if (weekdayRule) {
     source = "weekday";
-    rule = config.weekly[weekday];
+    rule = weekdayRule;
   }
 
   if (rule?.skip) return { skip: true, source, date: parsedDate, weekday };
