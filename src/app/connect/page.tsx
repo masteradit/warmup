@@ -9,7 +9,12 @@ import { CurlFlow } from "@/components/connect/curl-flow";
 import { useSession } from "@/lib/hooks";
 import type { StoredSession } from "@/lib/storage";
 
-const OTP_ENABLED = process.env.NEXT_PUBLIC_ENABLE_OTP_LOGIN !== "false";
+// Cult's reCAPTCHA key is domain-locked to their own origins — tokens minted
+// from any other domain are rejected with "captcha is invalid", so OTP login
+// can't work on a third-party deployment. The code path is kept behind this
+// flag (opt in with NEXT_PUBLIC_ENABLE_OTP_LOGIN=true) in case you self-host on
+// a Cult-approved origin or their policy changes.
+const OTP_ENABLED = process.env.NEXT_PUBLIC_ENABLE_OTP_LOGIN === "true";
 
 export default function ConnectPage() {
   const router = useRouter();

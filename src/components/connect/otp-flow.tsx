@@ -2,61 +2,55 @@
 
 import { useCallback, useState } from "react";
 import { Button, Input } from "@/components/ui";
-import { Recaptcha, resetRecaptcha } from "./recaptcha";
+import { useRecaptcha, RecaptchaNotice } from "./recaptcha";
 import { sendOtp, verifyOtp, ProxyError } from "@/lib/cult/api";
 import type { StoredSession } from "@/lib/storage";
 
 /**
- * Phone + OTP login against Cult's own endpoints, proxied. This is the Phase 1
- * spike path: it only works if Cult's reCAPTCHA site key isn't domain-locked.
- * On any failure the UI nudges the user to the paste method.
+ * Phone + OTP login against Cult's own endpoints, proxied. Uses Cult's
+ * reCAPTCHA v3 key invisibly (see useRecaptcha). This only works if Cult's key
+ * accepts tokens from this origin; on any failure the UI nudges the user to the
+ * paste method.
  */
 export function OtpFlow({
   onConnected,
 }: {
   onConnected: (s: StoredSession) => void;
 }) {
+  const { status: captchaStatus, execute } = useRecaptcha();
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [phone, setPhone] = useState("");
-  const [cc] = useState("+91");
+  const cc = "+91";
   const [otp, setOtp] = useState("");
-  const [captcha, setCaptcha] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const doSend = useCallback(async () => {
     if (!/^\d{10}$/.test(phone)) return setError("Enter a 10-digit mobile number.");
-    if (!captcha) return setError("Complete the verification checkbox first.");
     setBusy(true);
     setError(null);
     try {
-      await sendOtp({ phone, countryCallingCode: cc, captchaResponse: captcha });
+      const captchaResponse = await execute("login_send_otp");
+      await sendOtp({ phone, countryCallingCode: cc, captchaResponse });
       setStep("otp");
-      setCaptcha(null);
-      resetRecaptcha();
     } catch (e) {
       setError(describe(e));
-      setCaptcha(null);
-      resetRecaptcha();
     } finally {
       setBusy(false);
     }
-  }, [phone, cc, captcha]);
+  }, [phone, execute]);
 
   const doVerify = useCallback(async () => {
     if (!/^\d{4,6}$/.test(otp)) return setError("Enter the OTP you received.");
-    if (!captcha) return setError("Complete the verification checkbox first.");
     setBusy(true);
     setError(null);
     try {
-      // The proxy makes the verify call, reads Cult's Set-Cookie tokens, and
-      // returns them to us as `__session` (see the proxy route). We store that
-      // and replay it via X-Cult-Session from then on.
+      const captchaResponse = await execute("login_verify_otp");
       const res = (await verifyOtp({
         phone,
         countryCallingCode: cc,
         otp,
-        captchaResponse: captcha,
+        captchaResponse,
         deviceInfo: {
           appId: "web",
           brand: "browser",
@@ -69,7 +63,7 @@ export function OtpFlow({
 
       if (!res.__session || (!res.__session.at && !res.__session.st)) {
         setError(
-          "Logged in, but Cult didn't return a session this deployment can read. Use the paste method below instead.",
+          "Logged in, but Cult didn't return a session this deployment can read. Use the paste method instead.",
         );
         return;
       }
@@ -81,12 +75,12 @@ export function OtpFlow({
       });
     } catch (e) {
       setError(describe(e));
-      setCaptcha(null);
-      resetRecaptcha();
     } finally {
       setBusy(false);
     }
-  }, [otp, phone, cc, captcha, onConnected]);
+  }, [otp, phone, execute, onConnected]);
+
+  const captchaBroken = captchaStatus === "error";
 
   return (
     <div className="space-y-4">
@@ -105,8 +99,7 @@ export function OtpFlow({
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
             />
           </div>
-          <Recaptcha onToken={setCaptcha} onExpire={() => setCaptcha(null)} />
-          <Button size="lg" loading={busy} onClick={doSend}>
+          <Button size="lg" loading={busy} onClick={doSend} disabled={captchaBroken}>
             Send OTP
           </Button>
         </>
@@ -118,12 +111,11 @@ export function OtpFlow({
           <Input
             inputMode="numeric"
             autoComplete="one-time-code"
-            placeholder="••••••"
+            placeholder="******"
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
           />
-          <Recaptcha onToken={setCaptcha} onExpire={() => setCaptcha(null)} />
-          <Button size="lg" loading={busy} onClick={doVerify}>
+          <Button size="lg" loading={busy} onClick={doVerify} disabled={captchaBroken}>
             Verify &amp; connect
           </Button>
           <button
@@ -134,11 +126,17 @@ export function OtpFlow({
               setError(null);
             }}
           >
-            ← Change number
+            &larr; Change number
           </button>
         </>
       )}
 
+      <RecaptchaNotice />
+      {captchaBroken && (
+        <p className="text-sm text-danger">
+          Couldn&apos;t load Cult&apos;s verification. Use “Paste session” instead.
+        </p>
+      )}
       {error && <p className="text-sm text-danger">{error}</p>}
     </div>
   );
@@ -154,5 +152,5 @@ function describe(e: unknown): string {
 }
 
 function maskPhone(p: string): string {
-  return p.length === 10 ? `${p.slice(0, 2)}••••${p.slice(-2)}` : p;
+  return p.length === 10 ? `${p.slice(0, 2)}****${p.slice(-2)}` : p;
 }

@@ -1,113 +1,98 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-const SITE_KEY = process.env.NEXT_PUBLIC_CULT_CAPTCHA_SITE_KEY ||
+const SITE_KEY =
   process.env.NEXT_PUBLIC_CULT_RECAPTCHA_SITE_KEY ||
   "6LeggMUhAAAAAGLD3itX--L4Ht7PGzzKl4tNnVkR";
 
 declare global {
   interface Window {
     grecaptcha?: {
-      render: (el: HTMLElement, opts: Record<string, unknown>) => number;
-      reset: (id?: number) => void;
+      ready: (cb: () => void) => void;
+      execute: (siteKey: string, opts: { action: string }) => Promise<string>;
     };
-    __warmupOnRecaptcha?: () => void;
   }
 }
+
+type Status = "loading" | "ready" | "error";
 
 /**
- * Cult.fit's own reCAPTCHA v2 checkbox, rendered with their public site key
- * (scraped from cult.fit's login page). The user solves a real Google captcha —
- * nothing here bypasses it. The resulting token is sent to Cult's sendOtp /
- * verifyOtp endpoints through our proxy. If Cult ever domain-locks the key this
- * widget will error and onboarding falls back to the paste flow.
+ * Cult.fit's site key is reCAPTCHA **v3** — invisible, no checkbox. We load
+ * Google's script with `?render=<siteKey>` and mint a fresh token with
+ * `grecaptcha.execute(...)` immediately before each sendOtp / verifyOtp call
+ * (v3 tokens expire in ~2 minutes).
+ *
+ * Whether Cult's backend accepts a token minted from this origin depends on the
+ * domains registered against their key. If it rejects them, `execute()` still
+ * resolves but Cult returns "captcha is invalid" — the OTP screen surfaces that
+ * and points the user at the paste method.
  */
-export function Recaptcha({
-  onToken,
-  onExpire,
-}: {
-  onToken: (token: string) => void;
-  onExpire: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const widgetId = useRef<number | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+export function useRecaptcha() {
+  const [status, setStatus] = useState<Status>("loading");
+  const loaded = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
+    if (loaded.current) return;
+    loaded.current = true;
 
-    function tryRender() {
-      if (cancelled) return;
-      if (!window.grecaptcha || !ref.current || widgetId.current !== null) return;
-      try {
-        widgetId.current = window.grecaptcha.render(ref.current, {
-          sitekey: SITE_KEY,
-          callback: (token: string) => onToken(token),
-          "expired-callback": () => onExpire(),
-          "error-callback": () => setStatus("error"),
-        });
+    if (window.grecaptcha?.execute) {
+      setStatus("ready");
+      return;
+    }
+    const existing = document.getElementById("recaptcha-v3");
+    if (!existing) {
+      const s = document.createElement("script");
+      s.id = "recaptcha-v3";
+      s.src = `https://www.google.com/recaptcha/api.js?render=${SITE_KEY}`;
+      s.async = true;
+      s.onerror = () => setStatus("error");
+      document.head.appendChild(s);
+    }
+    const poll = setInterval(() => {
+      if (window.grecaptcha?.execute) {
+        clearInterval(poll);
         setStatus("ready");
-      } catch {
-        setStatus("error");
       }
-    }
-
-    if (window.grecaptcha) {
-      tryRender();
-    } else {
-      const existing = document.getElementById("recaptcha-api");
-      if (!existing) {
-        const s = document.createElement("script");
-        s.id = "recaptcha-api";
-        s.src = "https://www.google.com/recaptcha/api.js?render=explicit";
-        s.async = true;
-        s.defer = true;
-        s.onerror = () => setStatus("error");
-        document.head.appendChild(s);
-      }
-      const poll = setInterval(() => {
-        if (window.grecaptcha) {
-          clearInterval(poll);
-          tryRender();
-        }
-      }, 200);
-      const giveUp = setTimeout(() => {
-        clearInterval(poll);
-        if (widgetId.current === null) setStatus("error");
-      }, 10_000);
-      return () => {
-        cancelled = true;
-        clearInterval(poll);
-        clearTimeout(giveUp);
-      };
-    }
-
+    }, 200);
+    const giveUp = setTimeout(() => {
+      clearInterval(poll);
+      setStatus((s) => (s === "ready" ? s : "error"));
+    }, 10_000);
     return () => {
-      cancelled = true;
+      clearInterval(poll);
+      clearTimeout(giveUp);
     };
-  }, [onToken, onExpire]);
+  }, []);
 
-  return (
-    <div>
-      <div ref={ref} className="min-h-[78px]" />
-      {status === "loading" && (
-        <p className="text-xs text-muted">Loading verification…</p>
-      )}
-      {status === "error" && (
-        <p className="text-xs text-danger">
-          Couldn&apos;t load the verification widget. Use the paste method below
-          instead.
-        </p>
-      )}
-    </div>
+  const execute = useCallback(
+    (action: string): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const g = window.grecaptcha;
+        if (!g?.execute) return reject(new Error("reCAPTCHA not ready"));
+        g.ready(() => {
+          g.execute(SITE_KEY, { action }).then(resolve, reject);
+        });
+      }),
+    [],
   );
+
+  return { status, execute };
 }
 
-export function resetRecaptcha() {
-  try {
-    window.grecaptcha?.reset();
-  } catch {
-    /* ignore */
-  }
+/** The badge disclosure Google's terms require when using v3 invisibly. */
+export function RecaptchaNotice() {
+  return (
+    <p className="text-[11px] text-muted">
+      Protected by reCAPTCHA — Google&apos;s{" "}
+      <a className="underline" href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">
+        Privacy Policy
+      </a>{" "}
+      and{" "}
+      <a className="underline" href="https://policies.google.com/terms" target="_blank" rel="noreferrer">
+        Terms
+      </a>{" "}
+      apply.
+    </p>
+  );
 }

@@ -38,16 +38,18 @@ best-effort per-IP rate limiting.
 
 ### Connecting an account
 
-Two methods, chosen on the **Connect** screen:
+**Paste your session.** On a desktop browser, log in to cult.fit, open DevTools →
+Network, reload, and "Copy as cURL" any `api/` request. Paste it into the
+**Connect** screen; Warmup parses out only the `at` / `st` session tokens and
+verifies them with one live schedule call before storing.
 
-1. **Phone & OTP** — renders Cult.fit's own reCAPTCHA v2 widget (their public
-   site key) and calls their real `loginPhoneSendOtp` / `loginPhoneVerifyOtp`
-   endpoints through the proxy. You solve a genuine Google captcha; nothing is
-   bypassed. This depends on Cult not domain-locking their site key — if it stops
-   working, set `NEXT_PUBLIC_ENABLE_OTP_LOGIN=false` and use method 2.
-2. **Paste session** — on a desktop browser, log in to cult.fit, open DevTools →
-   Network, and "Copy as cURL" any `api/` request. Paste it in; Warmup keeps only
-   the `at` / `st` session tokens.
+> **Why not phone + OTP?** Cult's login is gated by a reCAPTCHA key that is locked
+> to their own domains — a token minted from any other origin is rejected with
+> "captcha is invalid". This was verified during development. Working around an
+> anti-bot control isn't something this project does, so paste onboarding is the
+> only method. The OTP code is still in the repo behind
+> `NEXT_PUBLIC_ENABLE_OTP_LOGIN=true` for anyone hosting on a Cult-approved
+> origin.
 
 Cult sessions expire after a while. When they do, any screen will send you back to
 **Connect** to reconnect.
