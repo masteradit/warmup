@@ -105,6 +105,6 @@ src/app/(screens)                     connect, schedule, preferences, explore, h
 
 ## Prior art
 
-CultBot (`cultbot/`, a separate open-source project, not part of this repo)
-automates the same booking from a YAML config. Warmup's `schedule.ts` and rules
-engine are ports of its pure logic; everything else is new.
+[CultBot](https://github.com/tapanmeena/CultBot), a separate open-source
+project, automates the same booking from a YAML config. Warmup's `schedule.ts`
+and rules engine are ports of its pure logic; everything else is new.
