@@ -5,9 +5,14 @@
  * `apikey` is the public web client key and is identical for every visitor,
  * logged in or not. Everything here can be overridden by env vars so the app
  * keeps working if Cult rotates a value.
+ *
+ * Cult migrated its website to `next.cult.fit` (the old `www.cult.fit` now
+ * redirects there). The same JSON API is served from both hosts with identical
+ * responses and the same `apikey` auth, so `https://www.cult.fit` remains a
+ * valid `CULT_API_BASE` override if `next.cult.fit` ever misbehaves.
  */
 
-export const CULT_API_BASE = process.env.CULT_API_BASE || "https://www.cult.fit";
+export const CULT_API_BASE = process.env.CULT_API_BASE || "https://next.cult.fit";
 
 /** Headers every Cult API request must carry, besides the user's session. */
 export const CULT_STATIC_HEADERS: Record<string, string> = {

@@ -30,7 +30,7 @@ Cult.fit's API blocks cross-origin browser calls, so Warmup ships a tiny
 
 - is stored **only in your browser's `localStorage`**, never in a database;
 - is sent only to Warmup's own proxy, in the `X-Cult-Session` header;
-- is forwarded upstream to `www.cult.fit` and **never stored or logged** by the
+- is forwarded upstream to `next.cult.fit` and **never stored or logged** by the
   server.
 
 The proxy only forwards a fixed allowlist of Cult endpoints and applies
@@ -38,10 +38,11 @@ best-effort per-IP rate limiting.
 
 ### Connecting an account
 
-**Paste your session.** On a desktop browser, log in to cult.fit, open DevTools →
-Network, reload, and "Copy as cURL" any `api/` request. Paste it into the
-**Connect** screen; Warmup parses out only the `at` / `st` session tokens and
-verifies them with one live schedule call before storing.
+**Paste your session.** On a desktop browser, log in to next.cult.fit, open
+DevTools → Network, reload, and "Copy as cURL" the first request in the list (the
+page document itself). Paste it into the **Connect** screen; Warmup parses out
+only the `at` / `st` session tokens and verifies them with one live schedule call
+before storing.
 
 > **Why not phone + OTP?** Cult's login is gated by a reCAPTCHA key that is locked
 > to their own domains — a token minted from any other origin is rejected with

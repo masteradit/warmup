@@ -47,8 +47,11 @@ function readCookie(cookieString: string, name: string): string | undefined {
 }
 
 /**
- * Build a Cult session from a pasted curl command. Requires an `at` cookie (the
- * access token) to be considered valid.
+ * Build a Cult session from a pasted curl command. Considered valid if the
+ * cookie string carries a Cult session token: either the bare `at` cookie, or
+ * next.cult.fit's signed `nextjanus_at` cookie (the one the new gateway
+ * actually checks). The whole cookie string is kept and forwarded verbatim, so
+ * a request that only has `nextjanus_at` still authenticates.
  */
 export function sessionFromCurl(curlString: string): {
   session: CultSession | null;
@@ -59,14 +62,15 @@ export function sessionFromCurl(curlString: string): {
     return {
       session: null,
       error:
-        "No cookies found in that command. Make sure you copied a request to www.cult.fit while logged in.",
+        "No cookies found in that command. Make sure you copied a request to next.cult.fit while logged in.",
     };
   const at = readCookie(cookies, "at");
-  if (!at)
+  const hasSignedSession = Boolean(readCookie(cookies, "nextjanus_at"));
+  if (!at && !hasSignedSession)
     return {
       session: null,
       error:
-        "That request has no `at` session cookie. Copy a logged-in request to www.cult.fit/api/… instead.",
+        "That request has no Cult session cookie (`at` / `nextjanus_at`). Copy a request from a logged-in next.cult.fit tab instead.",
     };
   return {
     session: {
