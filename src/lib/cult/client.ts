@@ -56,18 +56,27 @@ export interface RequestOptions {
 export interface CultSession {
   /** Full `Cookie:` header string (from paste onboarding). */
   cookie?: string;
-  /** `at` token value (from OTP login), sent as both header and cookie. */
+  /** `at` token value (OTP login only), sent as both header and cookie. */
   at?: string;
-  /** `st` token value (from OTP login). */
+  /** `st` token value (OTP login only). */
   st?: string;
   /** Optional device id captured at login. */
   deviceId?: string;
 }
 
 function sessionHeaders(s: CultSession): Record<string, string> {
+  // Paste onboarding: the raw Cookie string already carries everything the
+  // next.cult.fit ("NextJanus") gateway checks — the signed `nextjanus_at`
+  // cookie. Sending a bare `at`/`st` *header* alongside it makes that gateway
+  // reject the request with 401 "Login Required", so when we have a cookie
+  // string we forward ONLY that, untouched.
+  if (s.cookie) return { Cookie: s.cookie };
+
+  // OTP login: no cookie string, only token values. Send them as headers plus a
+  // synthesized cookie (legacy behaviour; OTP is off by default and can't work
+  // off-origin anyway).
   const h: Record<string, string> = {};
   const cookieParts: string[] = [];
-  if (s.cookie) cookieParts.push(s.cookie);
   if (s.at) {
     h["at"] = s.at;
     cookieParts.push(`at=${s.at}`);
